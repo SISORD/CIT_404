@@ -8,89 +8,201 @@
 </head>
 <body>
 
+    <!-- ============ AUTHENTICATION SCREEN ============ -->
+    <!-- Shown first, before anything CIT 404 related. Collects a nickname
+         and a team (1-12). Once submitted, the rest of the app appears. -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-card">
+            <h1 class="auth-title">CIT 404</h1>
+            <p class="auth-subtitle">OPERATOR AUTHENTICATION REQUIRED</p>
+
+            <label class="auth-label" for="nickname-input">NICKNAME</label>
+            <input type="text" id="nickname-input" class="auth-input" placeholder="Enter your callsign" maxlength="24" autocomplete="off">
+
+            <label class="auth-label">SELECT TEAM</label>
+            <div id="team-select-grid" class="team-select-grid"></div>
+
+            <button class="auth-submit" id="auth-submit" onclick="handleAuthSubmit()">ENTER THE NETWORK</button>
+            <p id="auth-error" class="auth-error"></p>
+        </div>
+    </div>
+
+    <!-- ============ MAIN APP (hidden until authenticated) ============ -->
+
+    <!-- Backdrop overlay shown behind the Team/Inventory modal panels -->
+    <div id="panel-overlay" class="panel-overlay" onclick="closeAllPanels()"></div>
+
+    <!-- HEADER: team icon (click to open panel) + inventory icon (click to open panel) -->
     <header>
-        <div>OPERATOR STATUS: ACTIVE</div>
-        <div class="wallet">BALANCE: <span id="balance-display">0 CIT$</span></div>
+        <button class="icon-widget" id="team-toggle" onclick="togglePanel('team-panel')">
+            <span class="icon-circle team-icon">🏃</span>
+            <span class="icon-text">
+                <span class="icon-label" id="header-team-label">TEAM --</span>
+                <span class="icon-balance" id="header-balance">0 CIT$</span>
+            </span>
+        </button>
+
+        <button class="icon-widget" id="inventory-toggle" onclick="togglePanel('inventory-panel')">
+            <span class="icon-label">INVENTORY</span>
+            <span class="icon-circle inventory-icon">🧪</span>
+        </button>
+
+        <!-- TEAM PANEL: hidden until the team icon is clicked -->
+        <div id="team-panel" class="dropdown-panel">
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <span class="icon-circle team-icon small">🏃</span>
+                    <h3 id="panel-team-label">TEAM --</h3>
+                    <button class="panel-close" onclick="closeAllPanels()">✕</button>
+                </div>
+                <div class="panel-row">
+                    <span>Operator</span>
+                    <span id="panel-nickname">--</span>
+                </div>
+                <div class="panel-row">
+                    <span>Wallet</span>
+                    <span id="balance-display">0 CIT$</span>
+                </div>
+                <div class="panel-row">
+                    <span>CP Challenges</span>
+                    <span id="cp-progress">0 / 7</span>
+                </div>
+                <div class="panel-row">
+                    <span>CTF Challenges</span>
+                    <span id="ctf-progress">0 / 7</span>
+                </div>
+                <div class="panel-row">
+                    <span>Data Fragments</span>
+                    <span id="data-progress">0 / 7</span>
+                </div>
+                <div class="panel-row">
+                    <span>Missions</span>
+                    <span id="missions-progress">0 / 2</span>
+                </div>
+                <div class="panel-row locked-row">
+                    <span>Archive Mission</span>
+                    <span class="locked-tag">🔒 LOCKED</span>
+                </div>
+                <button class="switch-team-btn" onclick="logoutOperator()">SWITCH OPERATOR / TEAM</button>
+            </div>
+        </div>
+
+        <!-- INVENTORY PANEL: hidden until the inventory icon is clicked -->
+        <div id="inventory-panel" class="dropdown-panel">
+            <div class="panel-card">
+                <div class="panel-card-header">
+                    <h3>INVENTORY</h3>
+                    <button class="panel-close" onclick="closeAllPanels()">✕</button>
+                </div>
+                <div class="inventory-grid">
+                    <div class="inventory-item">
+                        <div class="inventory-icon-box">⚡</div>
+                        <p>Boost Time</p>
+                        <span class="qty-badge" id="qty-boost">0</span>
+                    </div>
+                    <div class="inventory-item">
+                        <div class="inventory-icon-box">🛡️</div>
+                        <p>Double Reward</p>
+                        <span class="qty-badge" id="qty-double">0</span>
+                    </div>
+                    <div class="inventory-item">
+                        <div class="inventory-icon-box">🔑</div>
+                        <p>Hint</p>
+                        <span class="qty-badge" id="qty-hint">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </header>
 
+    <!-- NAV TABS: stretched to fill the width equally -->
+    <nav class="nav-tabs" id="main-nav">
+        <div class="tab active" data-page="home-page" onclick="switchPage(this)">HOME</div>
+        <div class="tab" data-page="challenges-page" onclick="switchPage(this)">CHALLENGES</div>
+        <div class="tab" data-page="missions-page" onclick="switchPage(this)">MISSIONS</div>
+        <div class="tab" data-page="items-page" onclick="switchPage(this)">ITEMS</div>
+        <div class="tab" data-page="story-page" onclick="switchPage(this)">STORY</div>
+    </nav>
+
     <main>
-        <!-- Phase I: Digital Arena -->
-        <div id="phase-one-dashboard">
-            <div class="nav-tabs">
-                <div class="tab active">CP Challenges</div>
-                <div class="tab">CTF Archive</div>
-                <div class="tab">Data Fragments</div>
-                <div class="tab" style="border-color: var(--alert); color: var(--alert);">Phase II: Missions (LOCKED)</div>
+
+        <!-- HOME PAGE -->
+        <section id="home-page" class="page active">
+            <div class="hero">
+                <h1 class="hero-title">CIT 404</h1>
+                <p class="hero-desc">
+                    <strong>THE CORE HAS FALLEN.</strong><br><br>
+                    The CIT Network has collapsed, and its core systems are offline.
+                    As newly recruited Operators, you must earn resources, recover
+                    lost data, and complete critical missions to restore the network.
+                </p>
             </div>
 
-            <div class="challenge-grid">
-                <div class="card">
-                    <h3>CTF-01: Ghost Node</h3>
-                    <p>Reward: 50 CIT$</p>
-                    <p>Trace the lost packet through the routing tables and retrieve the flag.</p>
-                    <input type="text" placeholder="Enter Flag (cit{...})">
-                    <button>SUBMIT FLAG</button>
-                </div>
-                
-                <div class="card">
-                    <h3>CP-04: Memory Leak</h3>
-                    <p>Reward: 75 CIT$</p>
-                    <p>Optimize the provided algorithm to output the sequence under O(N) complexity.</p>
-                    <input type="text" placeholder="Enter Output String">
-                    <button>SUBMIT ANSWER</button>
+            <div class="section-block">
+                <h2 class="section-title">NEWS</h2>
+                <div class="news-list">
+                    <div class="news-item">Team 2 completed CP 3</div>
+                    <div class="news-item">Team 4 completed missions</div>
+                    <div class="news-item">Team 6 bought Idle Reward</div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Phase II: Field Missions Dashboard (Initially Hidden) -->
-        <div id="phase-two-dashboard" style="display: none;">
-            <div class="nav-tabs">
-                <div class="tab active" onclick="switchTab('missions')">Field Missions</div>
-                <div class="tab" onclick="switchTab('market')">Marketplace</div>
-                <div class="tab" onclick="switchTab('logs')" style="color: var(--alert);">Encrypted Logs</div>
+        <!-- CHALLENGES PAGE -->
+        <section id="challenges-page" class="page">
+            <div class="phase-header" onclick="toggleCollapse('challenges-body', this)">
+                <h2 class="section-title">CHALLENGES : PHASE I</h2>
+                <span class="chevron">▾</span>
             </div>
 
-            <!-- Available Missions Panel -->
-            <div id="missions-panel" class="challenge-grid">
-                <div class="card" id="mission-signal">
-                    <h3>Signal Lost</h3>
-                    <p>Difficulty: ★★☆☆☆</p>
-                    <p>Cost: 100 CIT$ | Reward: 180 CIT$</p>
-                    <p>Locate the missing communication signal inside the territory.</p>
-                    <label style="font-size: 0.8rem;">
-                        <input type="checkbox" id="insure-signal"> Add Mission Insurance (100 CIT$)
-                    </label>
-                    <button onclick="purchaseMission('signal', 100)">AUTHORIZE DEPLOYMENT</button>
+            <div id="challenges-body" class="phase-body">
+                <div class="category-item" onclick="toggleCollapse('cp-content', this, true)">
+                    <span>CP CHALLENGES</span>
+                    <span class="chevron">▸</span>
                 </div>
-                
-                <div class="card" id="mission-breach">
-                    <h3>System Breach</h3>
-                    <p>Difficulty: ★★★★★</p>
-                    <p>Cost: 400 CIT$ | Reward: 900 CIT$</p>
-                    <p>Recover all fragmented data across multiple locations to unlock the final key.</p>
-                    <label style="font-size: 0.8rem;">
-                        <input type="checkbox" id="insure-breach"> Add Mission Insurance (100 CIT$)
-                    </label>
-                    <button onclick="purchaseMission('breach', 400)">AUTHORIZE DEPLOYMENT</button>
+                <div id="cp-content" class="category-content">
+                    <p class="empty-note">No CP challenges available yet.</p>
                 </div>
-            </div>
 
-            <!-- Marketplace Panel -->
-            <div id="market-panel" class="challenge-grid" style="display: none;">
-                <div class="card">
-                    <h3>Hint Level 1</h3>
-                    <p>Cost: 30 CIT$</p>
-                    <p>Acquire a small physical location clue.</p>
-                    <button onclick="purchaseItem('hint_1', 30)">BUY</button>
+                <div class="category-item" onclick="toggleCollapse('ctf-content', this, true)">
+                    <span>CTF CHALLENGES</span>
+                    <span class="chevron">▸</span>
                 </div>
-                <div class="card">
-                    <h3>Time Boost</h3>
-                    <p>Cost: Variable</p>
-                    <p>Injects extra minutes into an active physical mission.</p>
-                    <button onclick="purchaseItem('boost_time', 50)">BUY</button>
+                <div id="ctf-content" class="category-content">
+                    <p class="empty-note">No CTF challenges available yet.</p>
+                </div>
+
+                <div class="category-item" onclick="toggleCollapse('data-content', this, true)">
+                    <span>DATA FRAGMENTS</span>
+                    <span class="chevron">▸</span>
+                </div>
+                <div id="data-content" class="category-content">
+                    <p class="empty-note">No data fragments available yet.</p>
                 </div>
             </div>
-        </div>
+        </section>
+
+        <!-- MISSIONS PAGE (locked) -->
+        <section id="missions-page" class="page">
+            <div class="phase-header locked-header">
+                <h2 class="section-title locked-title">MISSIONS : PHASE II</h2>
+                <span class="locked-tag">🔒 LOCKED</span>
+            </div>
+            <p class="empty-note">Complete Phase I to unlock field missions.</p>
+        </section>
+
+        <!-- ITEMS PAGE -->
+        <section id="items-page" class="page">
+            <h2 class="section-title">ITEMS</h2>
+            <p class="empty-note">No items available yet.</p>
+        </section>
+
+        <!-- STORY PAGE -->
+        <section id="story-page" class="page">
+            <h2 class="section-title">STORY</h2>
+            <p class="empty-note">The story log is empty for now.</p>
+        </section>
+
     </main>
 
     <!-- Final Endgame Overlay (Initially Hidden) -->
