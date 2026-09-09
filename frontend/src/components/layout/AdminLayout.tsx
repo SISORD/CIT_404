@@ -1,0 +1,112 @@
+import { NavLink, Outlet } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BarChart3, Boxes, LogOut, Package, Radio, ScrollText, Users } from 'lucide-react'
+import { toast } from 'sonner'
+import { useAuth } from '@/store/auth-context'
+import { apiGet, apiPost } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import type { AdminOverview, Phase } from '@/types'
+
+const NAV = [
+  { to: '/admin', label: 'Dashboard', icon: BarChart3, end: true },
+  { to: '/admin/teams', label: 'Teams', icon: Users },
+  { to: '/admin/items', label: 'Items', icon: Package },
+  { to: '/admin/inventory', label: 'Inventory', icon: Boxes },
+  { to: '/admin/missions', label: 'Missions', icon: Radio },
+  { to: '/admin/ledger', label: 'Ledger', icon: ScrollText },
+]
+
+const PHASES: Phase[] = ['LOBBY', 'PHASE_I', 'PHASE_II', 'ENDGAME', 'CLOSED']
+
+export function AdminLayout() {
+  const { admin, logout } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data } = useQuery({
+    queryKey: ['admin-overview'],
+    queryFn: () => apiGet<AdminOverview>('/admin/overview'),
+    refetchInterval: 10_000,
+  })
+
+  const setPhase = useMutation({
+    mutationFn: (phase: Phase) => apiPost('/admin/phase', { phase }),
+    onSuccess: (_res, phase) => {
+      toast('PROTOCOL PHASE UPDATED', { description: phase })
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] })
+    },
+  })
+
+  const current = data?.phase.phase
+
+  return (
+    <div className="relative z-10 flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 border-b border-warn/30 bg-black/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3">
+          <div className="mr-auto">
+            <div className="font-display text-sm tracking-[0.2em] text-warn">CORE SUPERVISION</div>
+            <div className="text-[10px] tracking-[0.14em] text-term/40 uppercase">
+              {admin?.username} · {admin?.role}
+            </div>
+          </div>
+
+          {/* Phase control drives what every operator terminal can do. */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-[10px] tracking-[0.14em] text-term/35 uppercase">Phase</span>
+            {PHASES.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPhase.mutate(p)}
+                disabled={setPhase.isPending}
+                className={cn(
+                  'border px-2 py-1 text-[10px] font-bold tracking-[0.08em] transition-colors',
+                  current === p
+                    ? 'border-warn bg-warn text-void'
+                    : 'border-edge text-term/50 hover:border-warn/60 hover:text-warn'
+                )}
+              >
+                {p.replace('PHASE_', 'P')}
+              </button>
+            ))}
+          </div>
+
+          <Button variant="ghost" size="sm" onClick={logout}>
+            <LogOut /> Exit
+          </Button>
+        </div>
+
+        <nav className="mx-auto flex max-w-7xl overflow-x-auto border-t border-edge">
+          {NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                cn(
+                  'flex shrink-0 items-center gap-1.5 border-r border-edge px-4 py-2.5 text-[11px] font-bold tracking-[0.12em] uppercase transition-colors',
+                  isActive
+                    ? 'bg-warn/10 text-warn shadow-[inset_0_-2px_0_0_var(--color-warn)]'
+                    : 'text-term/45 hover:bg-term/5 hover:text-term/80'
+                )
+              }
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </NavLink>
+          ))}
+          {data && (
+            <div className="ml-auto flex shrink-0 items-center gap-2 px-4">
+              <Badge variant="muted">{data.totals.active_sessions} devices</Badge>
+              <Badge variant="info">{data.totals.circulating.toLocaleString()} CIT$ live</Badge>
+            </div>
+          )}
+        </nav>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
+        <Outlet />
+      </main>
+    </div>
+  )
+}
