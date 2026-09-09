@@ -1,0 +1,26 @@
+# One-command database for the event.
+#   docker compose -f "Infrastructure & Deployment/docker-compose.yml" up -d
+# init.sql and seed.sql run automatically the first time the volume is created.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cit404-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cit404
+    ports:
+      - '5432:5432'
+    volumes:
+      - cit404-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d cit404']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  cit404-data:

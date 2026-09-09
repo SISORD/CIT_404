@@ -1,105 +1,95 @@
+const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
-const db = require('./db_config');
+const rt = require('./lib/realtime');
+const { attachAuth, socketAuth } = require('./middleware/auth');
+const authRoutes = require('./routes/auth');
+const gameRoutes = require('./routes/game');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
+// The React dev server runs on its own origin, so CORS has to allow
+// credentials for the httpOnly refresh cookie to travel.
+const ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:4173')
+    .split(',').map((s) => s.trim());
 
-// WebSocket for real-time Operator synchronization
+const io = new Server(server, { cors: { origin: ORIGINS, credentials: true } });
+rt.bind(io);
+
+app.set('trust proxy', 1);
+app.use(cors({ origin: ORIGINS, credentials: true }));
+app.use(express.json({ limit: '256kb' }));
+app.use(cookieParser());
+app.use(attachAuth);
+
+// ---------------------------------------------------------------------
+// REAL-TIME
+// The three operators of a team share one wallet, so a balance change on
+// one phone has to reach the other two immediately. The socket handshake
+// carries the same access token as the REST calls: a client can only
+// join its own team room, never someone else's.
+// ---------------------------------------------------------------------
+io.use(socketAuth);
+
 io.on('connection', (socket) => {
-    socket.on('join_team', (teamId) => {
-        socket.join(`team_${teamId}`);
-        console.log(`Operator joined communication channel for Team ${teamId}`);
+    const auth = socket.data.auth;
+
+    socket.join('feed');
+
+    if (auth.kind === 'team') {
+        socket.join(`team_${auth.teamId}`);
+        io.to(`team_${auth.teamId}`).emit('operator_online', { nickname: auth.nickname });
+    } else if (auth.kind === 'admin') {
+        socket.join('admins');
+    }
+
+    socket.on('disconnect', () => {
+        if (auth.kind === 'team') {
+            io.to(`team_${auth.teamId}`).emit('operator_offline', { nickname: auth.nickname });
+        }
     });
 });
 
-// Phase I: Challenge Submission Engine
-app.post('/api/submit-flag', async (req, res) => {
-    const { teamId, category, flag } = req.body;
-    
-    try {
-        // Verify flag against the database
-        const challenge = await db.query(
-            'SELECT reward FROM challenges WHERE flag_answer = $1 AND category = $2', 
-            [flag, category]
-        );
-        
-        if (challenge.rows.length > 0) {
-            const reward = challenge.rows[0].reward;
-            
-            // The three Operators share one wallet and CIT$ balance[cite: 2].
-            const result = await db.query(
-                'UPDATE teams SET cit_balance = cit_balance + $1 WHERE id = $2 RETURNING cit_balance',
-                [reward, teamId]
-            );
-            
-            const newBalance = result.rows[0].cit_balance;
-            
-            // Broadcast the exact new balance to all Operators sharing this account[cite: 2].
-            io.to(`team_${teamId}`).emit('wallet_update', { balance: newBalance });
-            
-            res.json({ success: true, reward, newBalance });
-        } else {
-            res.status(400).json({ success: false, message: 'INVALID FLAG OR CORRUPTED DATA.' });
-        }
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'SYSTEM FAILURE DETECTED.' });
-    }
+// ---------------------------------------------------------------------
+// HTTP
+// ---------------------------------------------------------------------
+app.get('/api/health', (_req, res) => res.json({ status: 'THE CORE IS LISTENING', uptime: process.uptime() }));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/game', gameRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Serve the built React app in production.
+const clientDist = path.join(__dirname, '..', 'frontend', 'dist');
+app.use(express.static(clientDist));
+app.get(/^\/(?!api).*/, (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'), (err) => {
+        if (err) res.status(404).json({ error: 'NOT FOUND' });
+    });
 });
 
-// Phase II: Mission Acquisition Engine
-app.post('/api/purchase-mission', async (req, res) => {
-    const { teamId, missionId, cost, hasInsurance } = req.body;
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+    console.error(err);
 
-    try {
-        // 1. Check if the team has enough CIT$
-        const teamCheck = await db.query('SELECT cit_balance FROM teams WHERE id = $1', [teamId]);
-        
-        if (teamCheck.rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'TEAM NOT FOUND.' });
-        }
+    // A dead database surfaces as an AggregateError with an empty message,
+    // which tells whoever is running the event nothing. Name it instead.
+    const dbDown =
+        err.code === 'ECONNREFUSED' ||
+        (Array.isArray(err.errors) && err.errors.some((e) => e.code === 'ECONNREFUSED'));
 
-        const currentBalance = teamCheck.rows[0].cit_balance;
+    const message = dbDown
+        ? 'DATABASE UNREACHABLE. CHECK DATABASE_URL AND THAT POSTGRES IS RUNNING.'
+        : err.message || err.code || 'UNKNOWN FAILURE.';
 
-        if (currentBalance >= cost) {
-            // 2. Deduct the CIT$ immediately[cite: 2]
-            const updateResult = await db.query(
-                'UPDATE teams SET cit_balance = cit_balance - $1 WHERE id = $2 RETURNING cit_balance',
-                [cost, teamId]
-            );
-            
-            const newBalance = updateResult.rows[0].cit_balance;
-
-            // 3. Record the mission deployment (including insurance status)[cite: 2]
-            // Note: Assuming 'missionId' from frontend maps to a string identifier right now, 
-            // you may want to map this to the actual missions.id in a production database.
-            await db.query(
-                'INSERT INTO team_missions (team_id, status, has_insurance) VALUES ($1, $2, $3)',
-                [teamId, 'PURCHASED', hasInsurance]
-            );
-
-            // 4. Broadcast the deducted balance to all Operators sharing this wallet[cite: 2]
-            io.to(`team_${teamId}`).emit('wallet_update', { balance: newBalance });
-
-            res.json({ success: true, newBalance: newBalance });
-        } else {
-            // Insufficient funds
-            res.status(400).json({ success: false, message: 'INSUFFICIENT FUNDS.' });
-        }
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'SYSTEM FAILURE DETECTED.' });
-    }
+    res.status(err.status || (dbDown ? 503 : 500)).json({ error: 'SYSTEM FAILURE DETECTED.', message });
 });
 
 const PORT = process.env.PORT || 3000;
